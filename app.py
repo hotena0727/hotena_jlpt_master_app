@@ -1916,9 +1916,8 @@ if st.session_state.submitted and st.session_state.wrong_list:
         {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
       </div>
     </div>
-    """,
-            unsafe_allow_html=True,
-        )
+    """
+        st.markdown(card_html, unsafe_allow_html=True)
 
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
