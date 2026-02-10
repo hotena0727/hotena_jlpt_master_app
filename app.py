@@ -1880,15 +1880,15 @@ if st.session_state.submitted and st.session_state.wrong_list:
 </style>
 """,
         unsafe_allow_html=True,
-    )
-
-    def _s(v):
-        return "" if v is None else str(v)
+    )   
 
     def _h(x):
         s = "" if x is None else str(x)
         s = html.escape(s, quote=True)
         return s.replace("\n", "<br/>")
+
+    def _s(v):
+        return "" if v is None else str(v)
 
     for w in st.session_state.wrong_list:
         no = _s(w.get("No"))
@@ -1898,7 +1898,7 @@ if st.session_state.submitted and st.session_state.wrong_list:
         ex = _s(w.get("예문"))
         exkr = _s(w.get("예문해석"))
 
-        st.markdown(
+        card_html = f"""
             f"""
     <div class="jp">
       <div class="wrong-card">
