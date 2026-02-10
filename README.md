@@ -1,1 +1,1 @@
-# hotena_jlpt_master_app
+# hotena_quiz_test_app
