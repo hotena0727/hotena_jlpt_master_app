@@ -1883,10 +1883,10 @@ if st.session_state.submitted and st.session_state.wrong_list:
     )
 
     def _h(x):
-    # HTML 깨짐 방지: < > & " ' 모두 안전하게 처리
-    s = "" if x is None else str(x)
-    s = s.replace("\n", "<br/>")
-    return html.escape(s, quote=True)
+        # HTML 깨짐 방지: < > & " ' 모두 안전하게 처리
+        s = "" if x is None else str(x)
+        s = s.replace("\n", "<br/>")
+        return html.escape(s, quote=True)
 
     for w in st.session_state.wrong_list:
         no = _s(w.get("No"))
