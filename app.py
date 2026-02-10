@@ -1882,11 +1882,13 @@ if st.session_state.submitted and st.session_state.wrong_list:
         unsafe_allow_html=True,
     )
 
+    def _s(v):
+        return "" if v is None else str(v)
+
     def _h(x):
-        # HTML 깨짐 방지: < > & " ' 모두 안전하게 처리
         s = "" if x is None else str(x)
-        s = s.replace("\n", "<br/>")
-        return html.escape(s, quote=True)
+        s = html.escape(s, quote=True)
+        return s.replace("\n", "<br/>")
 
     for w in st.session_state.wrong_list:
         no = _s(w.get("No"))
@@ -1902,16 +1904,16 @@ if st.session_state.submitted and st.session_state.wrong_list:
       <div class="wrong-card">
         <div class="wrong-top">
           <div>
-            <div class="wrong-title">Q{no}. {grammar}</div>
-            <div class="wrong-sub">레벨: {st.session_state.level}</div>
+            <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
+            <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
           </div>
           <div class="tag">오답</div>
         </div>
 
-        <div class="ans-row"><div class="ans-k">내 답</div><div>{picked}</div></div>
-        <div class="ans-row"><div class="ans-k">정답</div><div><b>{correct}</b></div></div>
-        {'<div class="ans-row"><div class="ans-k">예문</div><div>'+ex+'</div></div>' if ex else ''}
-        {'<div class="ans-row"><div class="ans-k">해석</div><div>'+exkr+'</div></div>' if exkr else ''}
+        <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
+        <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
+        {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
+        {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
       </div>
     </div>
     """,
