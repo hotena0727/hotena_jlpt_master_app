@@ -394,7 +394,7 @@ KST_TZ = "Asia/Seoul"
 
 N = 10
 BASE_DIR = Path(__file__).resolve().parent
-CSV_PATH = BASE_DIR / "data" / "grammar_ALL_levels_pure_meaning_FINAL.csv"  # ✅ 최종 CSV 파일명
+CSV_PATH = BASE_DIR / "data" / "grammar.csv"  # ✅ 최종 CSV 파일명
 
 LEVEL_OPTIONS = ["N5", "N4", "N3", "N2", "N1"]
 LEVEL_LABEL_MAP = {lv: lv for lv in LEVEL_OPTIONS}
