@@ -1881,7 +1881,7 @@ if st.session_state.submitted and st.session_state.wrong_list:
 </style>
 """,
         unsafe_allow_html=True,
-    )   
+    )
 
     def _h(x):
         s = "" if x is None else str(x)
@@ -1900,25 +1900,27 @@ if st.session_state.submitted and st.session_state.wrong_list:
         exkr = _s(w.get("예문해석"))
 
         card_html = textwrap.dedent(f"""
-        <div class="jp">
-          <div class="wrong-card">
-            <div class="wrong-top">
-              <div>
-                <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
-                <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
-              </div>
-              <div class="tag">오답</div>
-            </div>
+<div class="jp">
+  <div class="wrong-card">
+    <div class="wrong-top">
+      <div>
+        <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
+        <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
+      </div>
+      <div class="tag">오답</div>
+    </div>
 
-            <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
-            <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
-            {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
-            {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
-          </div>
-        </div>
-        """).lstrip()
+    <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
+    <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
+    {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
+    {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
+  </div>
+</div>
+""").strip()
 
-    st.markdown(card_html, unsafe_allow_html=True)
+        # ✅ 반드시 for문 안에서 렌더링
+        st.markdown(card_html, unsafe_allow_html=True)
+
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
         retry_quiz = build_quiz_from_wrongs(st.session_state.wrong_list)
@@ -1926,14 +1928,6 @@ if st.session_state.submitted and st.session_state.wrong_list:
         st.session_state["_scroll_top_once"] = True
         st.rerun()
 
-# 다음 10문항
-if st.session_state.submitted:
-    if st.button("✅ 다음 10문항 시작하기", type="primary", use_container_width=True, key="btn_next_10"):
-        clear_question_widget_keys()
-        new_quiz = build_quiz(st.session_state.level)
-        start_quiz_state(new_quiz)
-        st.session_state["_scroll_top_once"] = True
-        st.rerun()
 
     show_naver_talk = (SHOW_NAVER_TALK == "Y") or is_admin()
     if show_naver_talk:
