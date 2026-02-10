@@ -1919,8 +1919,11 @@ if st.session_state.submitted and st.session_state.wrong_list:
     </div>
     """.strip()
 
-        # ✅ 마크다운이 아니라 HTML 컴포넌트로 렌더링
-        components.html(card_html, height=210)
+        # ✅ 마크다운 코드블록 방지: 각 줄 앞 공백 제거
+        card_html = "\n".join(line.lstrip() for line in card_html.splitlines())
+
+        st.markdown(card_html, unsafe_allow_html=True)
+
 
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
