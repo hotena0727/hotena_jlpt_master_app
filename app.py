@@ -21,6 +21,7 @@ from collections import Counter
 import time
 import traceback
 import base64
+import re
 
 # ============================================================
 # ✅ Page Config
@@ -1016,7 +1017,105 @@ def ensure_pool_ready():
         with st.expander("🔎 디버그: 레벨별 문법 수", expanded=False):
             st.write(pool["level"].value_counts(dropna=False))
             st.write("CSV_PATH =", str(CSV_PATH))
+# ============================================================
+# ✅ 오답(보기) 설계: 정확도(변별) 올리기
+# - 같은 레벨에서 뽑되, "너무 동떨어진 의미"를 줄이고
+# - 최근에 나왔던 보기 반복을 줄임
+# ============================================================
+def _norm_kr(s: str) -> str:
+    s = str(s or "").strip()
+    s = re.sub(r"\s+", " ", s)
+    return s
 
+def _tokenize_kr(s: str) -> set:
+    # 한국어 의미를 "대략적인 토큰"으로 쪼개서 유사도 계산(간단 버전)
+    # (너무 무겁게 하지 않기 위해 공백/구두점 기준)
+    s = _norm_kr(s)
+    s = re.sub(r"[^\w가-힣]+", " ", s)
+    toks = [t for t in s.split(" ") if t]
+    return set(toks)
+
+def pick_distractors_meaning_kr(
+    pool_level: pd.DataFrame,
+    pool_all: pd.DataFrame,
+    correct_meaning_kr: str,
+    level: str,
+    k: int = 3,
+    recent_key: str = "recent_distractors",
+    recent_keep: int = 60,
+) -> list[str]:
+    """
+    우선순위:
+    1) 같은 레벨(pool_level)에서 후보 생성
+    2) 부족하면 전체(pool_all)로 확장
+    그리고:
+    - 정답과 '완전 무관한' 의미를 조금 줄이기 위해 간단 유사도 점수로 정렬
+    - 최근에 나왔던 보기 반복 억제
+    """
+    correct = _norm_kr(correct_meaning_kr)
+    level = str(level or "").upper().strip()
+
+    # 최근 보기 캐시
+    if recent_key not in st.session_state or not isinstance(st.session_state[recent_key], list):
+        st.session_state[recent_key] = []
+    recent = st.session_state[recent_key][-recent_keep:]
+    recent_set = set(recent)
+
+    def build_candidates(df: pd.DataFrame) -> list[str]:
+        xs = (
+            df.loc[df["meaning_kr"].astype(str).str.strip() != correct, "meaning_kr"]
+            .dropna()
+            .astype(str)
+            .map(_norm_kr)
+            .tolist()
+        )
+        # 중복 제거(순서 유지)
+        out, seen = [], set()
+        for x in xs:
+            if not x or x == correct:
+                continue
+            if x in seen:
+                continue
+            seen.add(x)
+            out.append(x)
+        return out
+
+    cands = build_candidates(pool_level)
+
+    if len(cands) < k:
+        cands = build_candidates(pool_all)
+
+    if len(cands) < k:
+        return []
+
+    # 간단 유사도: 토큰 교집합 크기(너무 랜덤 방지)
+    ct = _tokenize_kr(correct)
+    def score(x: str) -> int:
+        xt = _tokenize_kr(x)
+        return len(ct & xt)
+
+    # 1) 최근 나온 보기 제외한 그룹 / 2) 최근 그룹
+    fresh = [x for x in cands if x not in recent_set]
+    old = [x for x in cands if x in recent_set]
+
+    # 유사도 높은 순으로 정렬 후 섞기(완전 똑같은 의미군만 몰리지 않게)
+    fresh.sort(key=score, reverse=True)
+    old.sort(key=score, reverse=True)
+
+    # 상위권에서 뽑되, 약간 랜덤성을 줘서 반복 패턴 방지
+    # (유사도가 너무 0인 것만 나오면 변별력이 떨어져서 상위권 우선)
+    top = fresh[: max(20, k * 8)] + old[: max(20, k * 8)]
+    top = list(dict.fromkeys(top))  # 중복 제거
+
+    # 최종 샘플링
+    if len(top) < k:
+        top = cands
+
+    picked = random.sample(top, k)
+
+    # 최근 캐시 업데이트
+    st.session_state[recent_key] = (st.session_state[recent_key] + picked)[-recent_keep:]
+    return picked
 # ============================================================
 # ✅ 퀴즈 로직: 문법 뜻(4지선다)
 # ============================================================
@@ -1027,26 +1126,26 @@ def make_question(row: pd.Series, pool_level: pd.DataFrame) -> dict:
     ex_kr = str(row.get("example_kr", "")).strip()
     lvl = str(row.get("level", "")).strip().upper()
 
-    # 오답 후보: 같은 레벨에서 meaning_kr만
-    candidates = (
-        pool_level.loc[pool_level["meaning_kr"] != meaning_kr, "meaning_kr"]
-        .dropna().drop_duplicates().tolist()
-    )
-    if len(candidates) < 3:
-        # 부족하면 전체풀에서 보충(앱 멈춤 방지)
-        pool_all = st.session_state["_pool"]
-        candidates = (
-            pool_all.loc[pool_all["meaning_kr"] != meaning_kr, "meaning_kr"]
-            .dropna().drop_duplicates().tolist()
-        )
+    # ✅ 개선된 오답 설계 적용
+    pool_all = st.session_state["_pool"]
 
-    if len(candidates) < 3:
-        st.error(f"오답 후보 부족: level={lvl}, 후보={len(candidates)}개")
+    wrongs = pick_distractors_meaning_kr(
+        pool_level=pool_level,
+        pool_all=pool_all,
+        correct_meaning_kr=meaning_kr,
+        level=lvl,
+        k=3,
+        recent_key=f"recent_distractors_{lvl}",  # 레벨별로 최근 보기 캐시 분리
+        recent_keep=80,
+    )
+
+    if len(wrongs) < 3:
+        st.error(f"오답 후보 부족: level={lvl}, 후보={len(wrongs)}개")
         st.stop()
 
-    wrongs = random.sample(candidates, 3)
     choices = wrongs + [meaning_kr]
     random.shuffle(choices)
+
 
     prompt = f"「{grammar}」의 뜻은?"
     if ex_jp:
