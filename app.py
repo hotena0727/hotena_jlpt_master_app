@@ -7,6 +7,7 @@
 # - 오답노트 + 오답만 다시풀기
 # - “맞힌 문법 제외 초기화” (유형은 1개라 레벨별로만 관리)
 # - 사운드 토글 + 테스트 재생 + 제출 후 1회 SFX
+# - ✅ 오답(보기) 설계 개선 + tag 자동 생성(없으면 추정)
 # ============================================================
 
 from pathlib import Path
@@ -27,6 +28,37 @@ import re
 # ✅ Page Config
 # ============================================================
 st.set_page_config(page_title="Grammar Quiz", layout="centered")
+
+# ============================================================
+# ✅ 문법 태그(기능) 자동 추정(룰 기반)  ← (중요) load_pool보다 위에 있어야 함
+# - CSV에 tag 컬럼이 없어도 자동 생성해서 사용 가능
+# - 목적 태그로 'に$' 같은 과도 규칙은 제거(쏠림 방지)
+# ============================================================
+def guess_grammar_tag(grammar: str) -> str:
+    g = unicodedata.normalize("NFKC", str(grammar or "")).strip()
+
+    rules = [
+        ("양보/역접", [r"のに$", r"くせに$", r"ながら(も)?$", r"とはいえ$", r"にもかかわらず$", r"それでも", r"それなのに"]),
+        ("조건/가정", [r"ば$", r"たら$", r"なら$", r"と$", r"かぎり", r"限り", r"うちは", r"あいだ", r"間"]),
+        ("원인/이유", [r"ので$", r"から$", r"ため(に)?$", r"せいで$", r"おかげで"]),
+        ("목적", [r"ために$", r"ように$", r"に向けて", r"にむけて"]),
+        ("추측/전달/간접", [r"そうだ$", r"らしい$", r"ようだ$", r"みたい$", r"とのこと", r"という"]),
+        ("의무/금지", [r"なければならない$", r"なくてはいけない$", r"てはならない$", r"てはいけない$", r"ちゃだめ"]),
+        ("능력/가능", [r"ことができる$", r"られる$", r"れる$"]),
+        ("희망/의지", [r"たい$", r"つもり$", r"ようと思う", r"うと思う", r"ことにする$"]),
+        ("경험/완료/상태", [r"たことがある$", r"てしまう$", r"てある$", r"ておく$", r"ている$"]),
+        ("사역", [r"させる$", r"させられる$"]),
+        ("수량/정도", [r"くらい", r"ぐらい", r"ほど", r"ばかり", r"だらけ", r"しか", r"だけ"]),
+        ("시간/순서", [r"前に$", r"後で$", r"あとで$", r"間に$", r"うちに$", r"ところ", r"最中"]),
+        ("열거/추가", [r"し$", r"だけでなく", r"のみならず", r"ほか", r"以外"]),
+        ("기본", [r".*"]),
+    ]
+
+    for tag, patterns in rules:
+        for p in patterns:
+            if re.search(p, g):
+                return tag
+    return "기본"
 
 # ============================================================
 # ✅ [SOUND] 사운드 유틸 (모바일 자동재생 정책 대응)
@@ -590,8 +622,6 @@ def to_kst_naive(x):
 
 # ============================================================
 # ✅ DB 함수 (테이블: profiles, quiz_attempts)
-# - quiz_attempts 컬럼 예시:
-#   user_id, user_email, level, pos_mode, quiz_len, score, wrong_count, wrong_list, created_at
 # ============================================================
 def ensure_profile(sb_authed, user):
     try:
@@ -616,7 +646,7 @@ def save_attempt_to_db(sb_authed, user_id, user_email, level, quiz_len, score, w
         "user_id": user_id,
         "user_email": user_email,
         "level": level,
-        "pos_mode": "grammar_meaning",  # 기존 컬럼명 유지용
+        "pos_mode": "grammar_meaning",
         "quiz_len": int(quiz_len),
         "score": int(score),
         "wrong_count": int(len(wrong_list)),
@@ -944,10 +974,6 @@ def render_topcard():
 
 # ============================================================
 # ✅ 로딩: CSV 풀 (문법용)
-# ✅ CSV 필수 컬럼:
-#   level, grammar, meaning_kr
-# ✅ 있으면 더 좋음:
-#   example_jp, example_kr
 # ============================================================
 READ_KW = dict(
     dtype=str,
@@ -964,7 +990,6 @@ def load_pool(csv_path_str: str) -> pd.DataFrame:
     if missing:
         raise ValueError(f"CSV 필수 컬럼 누락: {sorted(list(missing))}")
 
-    # 유니코드 정규화 + 레벨 정리
     def _nfkc(s):
         return unicodedata.normalize("NFKC", str(s or ""))
 
@@ -994,6 +1019,15 @@ def load_pool(csv_path_str: str) -> pd.DataFrame:
     else:
         df["example_kr"] = ""
 
+    # ✅ tag 컬럼(있으면 사용), 없으면 자동 추정
+    if "tag" in df.columns:
+        df["tag"] = df["tag"].astype(str).str.strip()
+    else:
+        df["tag"] = df["grammar"].apply(guess_grammar_tag)
+
+    df["tag"] = df["tag"].astype(str).str.strip()
+    df.loc[df["tag"] == "", "tag"] = "기본"
+
     df = df[(df["level"] != "") & (df["grammar"] != "") & (df["meaning_kr"] != "")].copy()
     return df.reset_index(drop=True)
 
@@ -1017,10 +1051,9 @@ def ensure_pool_ready():
         with st.expander("🔎 디버그: 레벨별 문법 수", expanded=False):
             st.write(pool["level"].value_counts(dropna=False))
             st.write("CSV_PATH =", str(CSV_PATH))
+
 # ============================================================
 # ✅ 오답(보기) 설계: 정확도(변별) 올리기
-# - 같은 레벨에서 뽑되, "너무 동떨어진 의미"를 줄이고
-# - 최근에 나왔던 보기 반복을 줄임
 # ============================================================
 def _norm_kr(s: str) -> str:
     s = str(s or "").strip()
@@ -1028,8 +1061,6 @@ def _norm_kr(s: str) -> str:
     return s
 
 def _tokenize_kr(s: str) -> set:
-    # 한국어 의미를 "대략적인 토큰"으로 쪼개서 유사도 계산(간단 버전)
-    # (너무 무겁게 하지 않기 위해 공백/구두점 기준)
     s = _norm_kr(s)
     s = re.sub(r"[^\w가-힣]+", " ", s)
     toks = [t for t in s.split(" ") if t]
@@ -1040,22 +1071,15 @@ def pick_distractors_meaning_kr(
     pool_all: pd.DataFrame,
     correct_meaning_kr: str,
     level: str,
+    correct_tag: str | None = None,
     k: int = 3,
     recent_key: str = "recent_distractors",
     recent_keep: int = 60,
 ) -> list[str]:
-    """
-    우선순위:
-    1) 같은 레벨(pool_level)에서 후보 생성
-    2) 부족하면 전체(pool_all)로 확장
-    그리고:
-    - 정답과 '완전 무관한' 의미를 조금 줄이기 위해 간단 유사도 점수로 정렬
-    - 최근에 나왔던 보기 반복 억제
-    """
     correct = _norm_kr(correct_meaning_kr)
     level = str(level or "").upper().strip()
+    correct_tag = str(correct_tag or "").strip()
 
-    # 최근 보기 캐시
     if recent_key not in st.session_state or not isinstance(st.session_state[recent_key], list):
         st.session_state[recent_key] = []
     recent = st.session_state[recent_key][-recent_keep:]
@@ -1069,7 +1093,6 @@ def pick_distractors_meaning_kr(
             .map(_norm_kr)
             .tolist()
         )
-        # 중복 제거(순서 유지)
         out, seen = [], set()
         for x in xs:
             if not x or x == correct:
@@ -1080,42 +1103,50 @@ def pick_distractors_meaning_kr(
             out.append(x)
         return out
 
-    cands = build_candidates(pool_level)
+    # 1) 같은 레벨 + 같은 태그 우선
+    tag_pool = None
+    if correct_tag:
+        try:
+            tag_pool = pool_level[pool_level["tag"].astype(str).str.strip() == correct_tag].copy()
+        except Exception:
+            tag_pool = None
 
+    cands = []
+    if tag_pool is not None and len(tag_pool) >= 4:
+        cands = build_candidates(tag_pool)
+
+    # 2) 부족하면 같은 레벨 전체
+    if len(cands) < k:
+        cands = build_candidates(pool_level)
+
+    # 3) 그래도 부족하면 전체풀
     if len(cands) < k:
         cands = build_candidates(pool_all)
 
     if len(cands) < k:
         return []
 
-    # 간단 유사도: 토큰 교집합 크기(너무 랜덤 방지)
     ct = _tokenize_kr(correct)
     def score(x: str) -> int:
         xt = _tokenize_kr(x)
         return len(ct & xt)
 
-    # 1) 최근 나온 보기 제외한 그룹 / 2) 최근 그룹
     fresh = [x for x in cands if x not in recent_set]
     old = [x for x in cands if x in recent_set]
 
-    # 유사도 높은 순으로 정렬 후 섞기(완전 똑같은 의미군만 몰리지 않게)
     fresh.sort(key=score, reverse=True)
     old.sort(key=score, reverse=True)
 
-    # 상위권에서 뽑되, 약간 랜덤성을 줘서 반복 패턴 방지
-    # (유사도가 너무 0인 것만 나오면 변별력이 떨어져서 상위권 우선)
-    top = fresh[: max(20, k * 8)] + old[: max(20, k * 8)]
-    top = list(dict.fromkeys(top))  # 중복 제거
+    top = fresh[: max(24, k * 10)] + old[: max(24, k * 10)]
+    top = list(dict.fromkeys(top))
 
-    # 최종 샘플링
     if len(top) < k:
         top = cands
 
     picked = random.sample(top, k)
-
-    # 최근 캐시 업데이트
     st.session_state[recent_key] = (st.session_state[recent_key] + picked)[-recent_keep:]
     return picked
+
 # ============================================================
 # ✅ 퀴즈 로직: 문법 뜻(4지선다)
 # ============================================================
@@ -1126,17 +1157,18 @@ def make_question(row: pd.Series, pool_level: pd.DataFrame) -> dict:
     ex_kr = str(row.get("example_kr", "")).strip()
     lvl = str(row.get("level", "")).strip().upper()
 
-    # ✅ 개선된 오답 설계 적용
     pool_all = st.session_state["_pool"]
+    tag = str(row.get("tag", "")).strip()
 
     wrongs = pick_distractors_meaning_kr(
         pool_level=pool_level,
         pool_all=pool_all,
         correct_meaning_kr=meaning_kr,
         level=lvl,
+        correct_tag=tag,
         k=3,
-        recent_key=f"recent_distractors_{lvl}",  # 레벨별로 최근 보기 캐시 분리
-        recent_keep=80,
+        recent_key=f"recent_distractors_{lvl}_{tag}",
+        recent_keep=120,
     )
 
     if len(wrongs) < 3:
@@ -1145,7 +1177,6 @@ def make_question(row: pd.Series, pool_level: pd.DataFrame) -> dict:
 
     choices = wrongs + [meaning_kr]
     random.shuffle(choices)
-
 
     prompt = f"「{grammar}」의 뜻은?"
     if ex_jp:
@@ -1215,7 +1246,6 @@ def build_quiz_from_wrongs(wrong_list: list) -> list:
 
     retry_df = retry_df.sample(frac=1).reset_index(drop=True)
 
-    # 오답 다시풀기는 '해당 레벨풀' 기준이 깔끔
     lv = str(retry_df.iloc[0]["level"]).upper()
     pool_level = pool[pool["level"].astype(str).str.upper() == lv].copy()
 
@@ -1518,7 +1548,6 @@ user_id = user.id
 user_email = getattr(user, "email", None) or st.session_state.get("login_email")
 sb_authed = get_authed_sb()
 
-# 타이틀(홈 제외)
 if st.session_state.get("page") != "home":
     email = getattr(user, "email", None) or st.session_state.get("login_email", "")
     st.markdown(
@@ -1531,7 +1560,6 @@ if st.session_state.get("page") != "home":
         unsafe_allow_html=True,
     )
 
-# 프로필 upsert
 if sb_authed is not None:
     ensure_profile(sb_authed, user)
 else:
@@ -1658,7 +1686,6 @@ with cbtn2:
         st.session_state["_scroll_top_once"] = True
         st.rerun()
 
-# 정복 안내
 k_now = mastery_key(st.session_state.level)
 if st.session_state.get("mastery_done", {}).get(k_now, False):
     st.success("🏆 이 레벨 문법을 완전히 정복했어요!")
@@ -1680,12 +1707,10 @@ if len(st.session_state.quiz) == 0:
     st.info("이 레벨에 출제할 문법이 없어요. 다른 레벨을 선택하거나, CSV의 level 값을 확인해 주세요.")
     st.stop()
 
-# answers 길이 맞춤
 quiz_len = len(st.session_state.quiz)
 if "answers" not in st.session_state or not isinstance(st.session_state.answers, list) or len(st.session_state.answers) != quiz_len:
     st.session_state.answers = [None] * quiz_len
 
-# 정복 상태면 문제영역 차단
 if bool(st.session_state.get("mastery_done", {}).get(k_now, False)):
     st.stop()
 
@@ -1766,7 +1791,6 @@ if st.session_state.submitted:
     st.success(f"점수: {score} / {quiz_len}")
     ratio = score / quiz_len if quiz_len else 0
 
-    # ✅ SFX (제출 직후 1회만)
     if not st.session_state.get("sfx_played_this_attempt", False):
         if ratio == 1:
             sfx("perfect")
@@ -1785,7 +1809,6 @@ if st.session_state.submitted:
     else:
         st.warning("💪 괜찮아요! 틀린 문제는 성장의 재료예요. 다시 한 번 도전해봐요.")
 
-    # ✅ DB 저장(1회)
     sb_authed_local = get_authed_sb()
     if sb_authed_local is None:
         st.warning("DB 저장용 토큰이 없습니다. 다시 로그인해 주세요.")
