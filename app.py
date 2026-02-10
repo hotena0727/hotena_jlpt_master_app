@@ -1899,27 +1899,27 @@ if st.session_state.submitted and st.session_state.wrong_list:
         ex = _s(w.get("예문"))
         exkr = _s(w.get("예문해석"))
 
-card_html = textwrap.dedent(f"""
-<div class="jp">
-  <div class="wrong-card">
-    <div class="wrong-top">
-      <div>
-        <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
-        <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
+    card_html = textwrap.dedent(f"""
+    <div class="jp">
+      <div class="wrong-card">
+        <div class="wrong-top">
+          <div>
+            <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
+            <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
+          </div>
+          <div class="tag">오답</div>
+        </div>
+
+        <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
+        <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
+        {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
+        {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
       </div>
-      <div class="tag">오답</div>
     </div>
+    """).strip()
 
-    <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
-    <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
-    {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
-    {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
-  </div>
-</div>
-""").strip()
-
-card_html = re.sub(r'^\s+', '', card_html, flags=re.M)  # ✅ 이 줄 추가
-st.markdown(card_html, unsafe_allow_html=True)
+    card_html = re.sub(r'^\s+', '', card_html, flags=re.M)  # ✅ 이 줄 추가
+    st.markdown(card_html, unsafe_allow_html=True)
 
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
