@@ -1,13 +1,13 @@
 # ============================================================
-# ✅ 하테나 문법 퀴즈(뜻 맞히기) - A안 완성판 (복붙용 단일 파일)
+# ✅ 하테나 문법 퀴즈(뜻 맞히기) - 최종판 (단일 파일)
 # - 레벨: N5~N1
-# - 문제: 문법(일본어)을 보고 한국어 뜻 고르기(4지선다)
+# - 문제: 문법(일본어)을 보고 한국어 뜻(문장형) 고르기(4지선다)
 # - 로그인/회원가입(Supabase Auth) + 쿠키 세션 복원
 # - 홈/퀴즈/마이페이지/관리자 라우팅
 # - 오답노트 + 오답만 다시풀기
-# - “맞힌 문법 제외 초기화” (유형은 1개라 레벨별로만 관리)
-# - 사운드 토글 + 테스트 재생 + 제출 후 1회 SFX
-# - ✅ 오답(보기) 설계 개선 + tag 자동 생성(없으면 추정)
+# - “맞힌 문법 제외 초기화”(레벨별)
+# - 사운드 토글 + 제출 후 1회 SFX
+# - ✅ CSV는 meaning_kr "뜻만" 규칙으로 강제 정규화(설명/용법 제거)
 # ============================================================
 
 from pathlib import Path
@@ -25,43 +25,11 @@ import base64
 import re
 import html
 import textwrap
-import streamlit.components.v1 as components
 
 # ============================================================
 # ✅ Page Config
 # ============================================================
 st.set_page_config(page_title="Grammar Quiz", layout="centered")
-
-# ============================================================
-# ✅ 문법 태그(기능) 자동 추정(룰 기반)  ← (중요) load_pool보다 위에 있어야 함
-# - CSV에 tag 컬럼이 없어도 자동 생성해서 사용 가능
-# - 목적 태그로 'に$' 같은 과도 규칙은 제거(쏠림 방지)
-# ============================================================
-def guess_grammar_tag(grammar: str) -> str:
-    g = unicodedata.normalize("NFKC", str(grammar or "")).strip()
-
-    rules = [
-        ("양보/역접", [r"のに$", r"くせに$", r"ながら(も)?$", r"とはいえ$", r"にもかかわらず$", r"それでも", r"それなのに"]),
-        ("조건/가정", [r"ば$", r"たら$", r"なら$", r"と$", r"かぎり", r"限り", r"うちは", r"あいだ", r"間"]),
-        ("원인/이유", [r"ので$", r"から$", r"ため(に)?$", r"せいで$", r"おかげで"]),
-        ("목적", [r"ために$", r"ように$", r"に向けて", r"にむけて"]),
-        ("추측/전달/간접", [r"そうだ$", r"らしい$", r"ようだ$", r"みたい$", r"とのこと", r"という"]),
-        ("의무/금지", [r"なければならない$", r"なくてはいけない$", r"てはならない$", r"てはいけない$", r"ちゃだめ"]),
-        ("능력/가능", [r"ことができる$", r"られる$", r"れる$"]),
-        ("희망/의지", [r"たい$", r"つもり$", r"ようと思う", r"うと思う", r"ことにする$"]),
-        ("경험/완료/상태", [r"たことがある$", r"てしまう$", r"てある$", r"ておく$", r"ている$"]),
-        ("사역", [r"させる$", r"させられる$"]),
-        ("수량/정도", [r"くらい", r"ぐらい", r"ほど", r"ばかり", r"だらけ", r"しか", r"だけ"]),
-        ("시간/순서", [r"前に$", r"後で$", r"あとで$", r"間に$", r"うちに$", r"ところ", r"最中"]),
-        ("열거/추가", [r"し$", r"だけでなく", r"のみならず", r"ほか", r"以外"]),
-        ("기본", [r".*"]),
-    ]
-
-    for tag, patterns in rules:
-        for p in patterns:
-            if re.search(p, g):
-                return tag
-    return "기본"
 
 # ============================================================
 # ✅ [SOUND] 사운드 유틸 (모바일 자동재생 정책 대응)
@@ -421,17 +389,17 @@ sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 SHOW_POST_SUBMIT_UI = "N"
 SHOW_NAVER_TALK = "Y"
 NAVER_TALK_URL = "https://talk.naver.com/W45141"
-APP_URL = "https://YOUR_APP_URL.streamlit.app/"  # ✅ 본인 앱 URL로 변경(회원가입 인증 링크 리다이렉트)
+APP_URL = "https://YOUR_APP_URL.streamlit.app/"  # ✅ 본인 앱 URL로 변경
 KST_TZ = "Asia/Seoul"
 
 N = 10
 BASE_DIR = Path(__file__).resolve().parent
-CSV_PATH = BASE_DIR / "data" / "grammar.csv"  # ✅ 문법 CSV 파일
+CSV_PATH = BASE_DIR / "data" / "grammar_ALL_levels_pure_meaning_FINAL.csv"  # ✅ 최종 CSV 파일명
 
 LEVEL_OPTIONS = ["N5", "N4", "N3", "N2", "N1"]
 LEVEL_LABEL_MAP = {lv: lv for lv in LEVEL_OPTIONS}
 
-QUIZ_TYPE = "meaning"  # 문법뜻 맞히기 1종만
+QUIZ_TYPE = "meaning"
 
 # ============================================================
 # ✅ 세션 기본값
@@ -499,8 +467,6 @@ def start_quiz_state(quiz_list: list):
     st.session_state.saved_this_attempt = False
     st.session_state.session_stats_applied_this_attempt = False
     st.session_state.wrong_list = []
-
-    # ✅ SFX 1회만
     st.session_state.sfx_played_this_attempt = False
 
 # ============================================================
@@ -976,13 +942,41 @@ def render_topcard():
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# ✅ 로딩: CSV 풀 (문법용)
+# ✅ 로딩: CSV 풀 (문법용)  + 정규화 강제
 # ============================================================
 READ_KW = dict(
     dtype=str,
     keep_default_na=False,
     na_values=["nan", "NaN", "NULL", "null", "None", "none"],
 )
+
+def _nfkc(x: str) -> str:
+    return unicodedata.normalize("NFKC", str(x or "")).strip()
+
+def _norm_level(x: str) -> str:
+    x = _nfkc(x).upper().replace(" ", "")
+    m = re.search(r"(N[1-5])", x)
+    if m:
+        return m.group(1)
+    m2 = re.fullmatch(r"[1-5]", x)
+    return f"N{m2.group(0)}" if m2 else ""
+
+def _clean_grammar(g: str) -> str:
+    g = _nfkc(g)
+    g = re.sub(r"\s*\(.*?\)\s*", "", g).strip()
+    g = re.sub(r"\s+", " ", g).strip()
+    return g
+
+def _clean_meaning(m: str) -> str:
+    m = _nfkc(m)
+    m = re.sub(r"^(뜻|설명|용법|기능)\s*[:：]\s*", "", m).strip()
+    m = re.sub(r"\(.*?\)", "", m).strip()
+    m = re.sub(r"\s+", " ", m).strip()
+    if m:
+        m = m.rstrip("。")
+        if not m.endswith("."):
+            m += "."
+    return m
 
 @st.cache_data(show_spinner=False)
 def load_pool(csv_path_str: str) -> pd.DataFrame:
@@ -993,46 +987,31 @@ def load_pool(csv_path_str: str) -> pd.DataFrame:
     if missing:
         raise ValueError(f"CSV 필수 컬럼 누락: {sorted(list(missing))}")
 
-    def _nfkc(s):
-        return unicodedata.normalize("NFKC", str(s or ""))
-
-    lv = df["level"].apply(_nfkc).astype(str).str.upper().str.strip()
-    lv = lv.str.replace(" ", "", regex=False)
-    extracted = lv.str.extract(r"(N[1-5])", expand=False)
-
-    digit_map = {"1": "N1", "2": "N2", "3": "N3", "4": "N4", "5": "N5"}
-    only_digit = lv.where(extracted.isna(), "")
-    only_digit = only_digit.str.extract(r"^([1-5])$", expand=False)
-    digit_fixed = only_digit.map(digit_map)
-
-    final_lv = extracted.fillna(digit_fixed).fillna(lv)
-    final_lv = final_lv.where(final_lv.isin(["N1", "N2", "N3", "N4", "N5"]), "")
-    df["level"] = final_lv
-
-    df["grammar"] = df["grammar"].astype(str).str.strip()
-    df["meaning_kr"] = df["meaning_kr"].astype(str).str.strip()
+    df["level"] = df["level"].map(_norm_level)
+    df["grammar"] = df["grammar"].map(_clean_grammar)
+    df["meaning_kr"] = df["meaning_kr"].map(_clean_meaning)
 
     if "example_jp" in df.columns:
-        df["example_jp"] = df["example_jp"].astype(str).str.strip()
+        df["example_jp"] = df["example_jp"].map(_nfkc)
     else:
         df["example_jp"] = ""
 
     if "example_kr" in df.columns:
-        df["example_kr"] = df["example_kr"].astype(str).str.strip()
+        exkr = df["example_kr"].map(_nfkc).str.rstrip("。")
+        df["example_kr"] = exkr.where(exkr == "", exkr + ".")
     else:
         df["example_kr"] = ""
 
-    # ✅ tag 컬럼(있으면 사용), 없으면 자동 추정
+    # tag는 선택: 없으면 '기본'(오답 설계엔 영향 거의 없음)
     if "tag" in df.columns:
-        df["tag"] = df["tag"].astype(str).str.strip()
+        df["tag"] = df["tag"].map(_nfkc)
     else:
-        df["tag"] = df["grammar"].apply(guess_grammar_tag)
-
-    df["tag"] = df["tag"].astype(str).str.strip()
+        df["tag"] = "기본"
     df.loc[df["tag"] == "", "tag"] = "기본"
 
     df = df[(df["level"] != "") & (df["grammar"] != "") & (df["meaning_kr"] != "")].copy()
-    return df.reset_index(drop=True)
+    df = df.drop_duplicates(subset=["level", "grammar", "meaning_kr"]).reset_index(drop=True)
+    return df
 
 def ensure_pool_ready():
     if st.session_state.get("pool_ready") and isinstance(st.session_state.get("_pool"), pd.DataFrame):
@@ -1056,7 +1035,7 @@ def ensure_pool_ready():
             st.write("CSV_PATH =", str(CSV_PATH))
 
 # ============================================================
-# ✅ 오답(보기) 설계: 정확도(변별) 올리기
+# ✅ 오답(보기) 설계: meaning_kr만 사용
 # ============================================================
 def _norm_kr(s: str) -> str:
     s = str(s or "").strip()
@@ -1077,7 +1056,7 @@ def pick_distractors_meaning_kr(
     correct_tag: str | None = None,
     k: int = 3,
     recent_key: str = "recent_distractors",
-    recent_keep: int = 60,
+    recent_keep: int = 80,
 ) -> list[str]:
     correct = _norm_kr(correct_meaning_kr)
     level = str(level or "").upper().strip()
@@ -1106,23 +1085,16 @@ def pick_distractors_meaning_kr(
             out.append(x)
         return out
 
-    # 1) 같은 레벨 + 같은 태그 우선
-    tag_pool = None
-    if correct_tag:
-        try:
-            tag_pool = pool_level[pool_level["tag"].astype(str).str.strip() == correct_tag].copy()
-        except Exception:
-            tag_pool = None
-
+    # 1) 같은 레벨(+ 같은 tag가 있으면) 우선
     cands = []
-    if tag_pool is not None and len(tag_pool) >= 4:
-        cands = build_candidates(tag_pool)
+    if correct_tag:
+        tag_pool = pool_level[pool_level["tag"].astype(str).str.strip() == correct_tag].copy()
+        if len(tag_pool) >= 4:
+            cands = build_candidates(tag_pool)
 
-    # 2) 부족하면 같은 레벨 전체
     if len(cands) < k:
         cands = build_candidates(pool_level)
 
-    # 3) 그래도 부족하면 전체풀
     if len(cands) < k:
         cands = build_candidates(pool_all)
 
@@ -1130,6 +1102,7 @@ def pick_distractors_meaning_kr(
         return []
 
     ct = _tokenize_kr(correct)
+
     def score(x: str) -> int:
         xt = _tokenize_kr(x)
         return len(ct & xt)
@@ -1248,7 +1221,6 @@ def build_quiz_from_wrongs(wrong_list: list) -> list:
         st.stop()
 
     retry_df = retry_df.sample(frac=1).reset_index(drop=True)
-
     lv = str(retry_df.iloc[0]["level"]).upper()
     pool_level = pool[pool["level"].astype(str).str.upper() == lv].copy()
 
@@ -1441,7 +1413,7 @@ def render_my_dashboard():
     <div class="jp">
       <div class="wt10-card">
         <div class="wt10-left">
-          <div class="wt10-title">#{rank} {grammar}</div>
+          <div class="wt10-title">#{rank} {html.escape(grammar)}</div>
           <div class="wt10-sub">최근 50회 기준</div>
         </div>
         <div class="wt10-badge">오답 {cnt}회</div>
@@ -1485,7 +1457,7 @@ def render_home():
         f"""
 <div class="jp headbar">
   <div class="headtitle">✨하테나일본어 문법정복</div>
-  <div class="headhello">환영합니다 🙂 <span class="mail">{email}</span></div>
+  <div class="headhello">환영합니다 🙂 <span class="mail">{html.escape(email)}</span></div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1507,7 +1479,7 @@ def render_home():
   border:1px solid rgba(120,120,120,0.18);
   border-radius:18px; padding:16px; background:rgba(255,255,255,0.03);">
   <div style="font-weight:900; font-size:14px; opacity:.75;">오늘의 말</div>
-  <div style="margin-top:6px; font-weight:900; font-size:20px; line-height:1.3;">{q}</div>
+  <div style="margin-top:6px; font-weight:900; font-size:20px; line-height:1.3;">{html.escape(q)}</div>
   <div style="margin-top:10px; opacity:.80; font-size:13px; line-height:1.55;">
     오늘은 문법 뜻 10개만, 가볍게 가볼까요?
   </div>
@@ -1557,7 +1529,7 @@ if st.session_state.get("page") != "home":
         f"""
 <div class="jp headbar">
   <div class="headtitle">✨ 문법 퀴즈</div>
-  <div class="headhello">환영합니다 🙂 <span class="mail">{email}</span></div>
+  <div class="headhello">환영합니다 🙂 <span class="mail">{html.escape(email)}</span></div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1724,7 +1696,7 @@ for idx, q in enumerate(st.session_state.quiz):
     st.subheader(f"Q{idx+1}")
 
     st.markdown(
-        f'<div class="jp" style="margin-top:-6px; margin-bottom:6px; font-size:18px; font-weight:500; line-height:1.35;">{q["prompt"]}</div>',
+        f'<div class="jp" style="margin-top:-6px; margin-bottom:6px; font-size:18px; font-weight:500; line-height:1.35;">{html.escape(q["prompt"]).replace("\\n","<br/>")}</div>',
         unsafe_allow_html=True,
     )
 
@@ -1900,30 +1872,26 @@ if st.session_state.submitted and st.session_state.wrong_list:
         ex = _s(w.get("예문"))
         exkr = _s(w.get("예문해석"))
 
-        card_html = f"""
-    <div class="jp">
-      <div class="wrong-card">
-        <div class="wrong-top">
-          <div>
-            <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
-            <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
-          </div>
-          <div class="tag">오답</div>
-        </div>
-
-        <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
-        <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
-        {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
-        {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
+        card_html = textwrap.dedent(f"""
+<div class="jp">
+  <div class="wrong-card">
+    <div class="wrong-top">
+      <div>
+        <div class="wrong-title">Q{_h(no)}. {_h(grammar)}</div>
+        <div class="wrong-sub">레벨: {_h(st.session_state.level)}</div>
       </div>
+      <div class="tag">오답</div>
     </div>
-    """.strip()
 
-        # ✅ 마크다운 코드블록 방지: 각 줄 앞 공백 제거
-        card_html = "\n".join(line.lstrip() for line in card_html.splitlines())
+    <div class="ans-row"><div class="ans-k">내 답</div><div>{_h(picked)}</div></div>
+    <div class="ans-row"><div class="ans-k">정답</div><div><b>{_h(correct)}</b></div></div>
+    {f'<div class="ans-row"><div class="ans-k">예문</div><div>{_h(ex)}</div></div>' if ex else ''}
+    {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
+  </div>
+</div>
+""").strip()
 
         st.markdown(card_html, unsafe_allow_html=True)
-
 
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
@@ -1931,7 +1899,6 @@ if st.session_state.submitted and st.session_state.wrong_list:
         start_quiz_state(retry_quiz)
         st.session_state["_scroll_top_once"] = True
         st.rerun()
-
 
     show_naver_talk = (SHOW_NAVER_TALK == "Y") or is_admin()
     if show_naver_talk:
