@@ -1898,8 +1898,7 @@ if st.session_state.submitted and st.session_state.wrong_list:
         ex = _s(w.get("예문"))
         exkr = _s(w.get("예문해석"))
 
-        card_html = f"""
-            f"""
+        card_html = f"""            
     <div class="jp">
       <div class="wrong-card">
         <div class="wrong-top">
