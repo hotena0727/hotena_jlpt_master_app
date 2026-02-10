@@ -25,6 +25,7 @@ import base64
 import re
 import html
 import textwrap
+import streamlit.components.v1 as components
 
 # ============================================================
 # ✅ Page Config
@@ -1899,7 +1900,7 @@ if st.session_state.submitted and st.session_state.wrong_list:
         ex = _s(w.get("예문"))
         exkr = _s(w.get("예문해석"))
 
-    card_html = textwrap.dedent(f"""
+        card_html = f"""
     <div class="jp">
       <div class="wrong-card">
         <div class="wrong-top">
@@ -1916,10 +1917,10 @@ if st.session_state.submitted and st.session_state.wrong_list:
         {f'<div class="ans-row"><div class="ans-k">해석</div><div>{_h(exkr)}</div></div>' if exkr else ''}
       </div>
     </div>
-    """).strip()
+    """.strip()
 
-    card_html = re.sub(r'^\s+', '', card_html, flags=re.M)  # ✅ 이 줄 추가
-    st.markdown(card_html, unsafe_allow_html=True)
+        # ✅ 마크다운이 아니라 HTML 컴포넌트로 렌더링
+        components.html(card_html, height=210)
 
     if st.button("❌ 틀린 문제만 다시 풀기", type="primary", use_container_width=True, key="btn_retry_wrongs_bottom"):
         clear_question_widget_keys()
